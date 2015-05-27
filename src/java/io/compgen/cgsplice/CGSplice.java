@@ -1,6 +1,10 @@
 package io.compgen.cgsplice;
 
 
+import io.compgen.cgsplice.cli.FastaJunctions;
+import io.compgen.cgsplice.cli.FindEvents;
+import io.compgen.cgsplice.cli.JunctionCount;
+import io.compgen.cgsplice.cli.JunctionDiffCli;
 import io.compgen.cmdline.Help;
 import io.compgen.cmdline.License;
 import io.compgen.cmdline.MainBuilder;
@@ -32,6 +36,10 @@ public class CGSplice {
 		.setHelpFooter("http://compgen.io/cgsplice\n"+getVersion())
 		.addCommand(Help.class)
 		.addCommand(License.class)
+        .addCommand(JunctionCount.class)
+        .addCommand(FindEvents.class)
+        .addCommand(JunctionDiffCli.class)
+        .addCommand(FastaJunctions.class)
 		.findAndRun(args);
 	}
 		
