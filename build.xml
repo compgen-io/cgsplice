@@ -1,0 +1,95 @@
+<project name="cgsplice" default="jar">
+    <property name="version" value="0.1"/>
+    <property name="lib.dir" value="lib"/>
+    <property name="blib.dir" value="blib"/>
+    <property name="build.dir" value="build"/>
+    <property name="dist.dir" value="dist"/>
+    <property name="src.dir" value="src"/>
+	
+    <target name="clean">
+        <delete dir="${build.dir}"/>
+        <delete dir="${dist.dir}"/>
+    </target>
+
+	<path id="classpath">
+        <fileset dir="${lib.dir}" includes="**/*.jar"/>
+    </path>
+
+	<target name="compile">
+        <mkdir dir="${build.dir}/classes"/>
+    <!--
+           <javac srcdir="${src.dir}/java" destdir="${build.dir}/classes" classpathref="classpath" debug="true" debuglevel="lines,vars,source"/>
+    -->
+        <javac
+            srcdir="${src.dir}/java"
+            destdir="${build.dir}/classes"
+            compiler="com.google.errorprone.ErrorProneAntCompilerAdapter"
+            encoding="UTF-8"
+            debug="true"
+            includeantruntime="false"
+            classpathref="classpath"
+            debuglevel="lines,vars,source"
+            >
+            <compilerclasspath>
+                <fileset file="${blib.dir}/error_prone_ant-2.0.2-SNAPSHOT.jar"/>
+            </compilerclasspath>
+        </javac>
+		
+    </target>
+
+	<target name="jar" depends="compile, git.revision">
+        <copy file="LICENSE" todir="${build.dir}/classes/"/>
+        <copy file="INCLUDES" todir="${build.dir}/classes/"/>
+        <delete file="${build.dir}/classes/io/compgen/cgsplice/VERSION"/>
+ 		<echo file="${build.dir}/classes/io/compgen/cgsplice/VERSION" message="cgsplice-{version}-${repository.version}"/>
+
+		<mkdir dir="${dist.dir}"/>
+	    <taskdef name="jarjar" classname="com.tonicsystems.jarjar.JarJarTask"
+	        classpath="${blib.dir}/jarjar-1.4.jar"/>
+        <jar destfile="${dist.dir}/${ant.project.name}-${version}.jar">
+            <fileset dir="${build.dir}/classes"/>
+            <fileset dir="${src.dir}/java" includes="**/*.java"/>
+        </jar>
+	    <jarjar jarfile="${dist.dir}/cgsplice.jar.tmp">
+            <manifest>
+                <attribute name="Main-Class" value="io.compgen.cgsplice.CGSplice"/>
+            </manifest>
+            <fileset dir="${build.dir}/classes"/>
+            <zipfileset src="${lib.dir}/ngsutilsj-0.3.jar"/>
+            <zipfileset src="${lib.dir}/htsjdk-1.126.jar"/>
+            <zipfileset src="${lib.dir}/commons-jexl-2.1.1.jar"/>
+            <zipfileset src="${lib.dir}/commons-logging-1.1.1.jar"/>
+            <zipfileset src="${lib.dir}/commons-math3-3.3.jar"/>
+            <zipfileset src="${lib.dir}/compgen-common-0.1.jar"/>
+            <zipfileset src="${lib.dir}/compgen-cmdline-0.4.1.jar"/>
+            <zipfileset src="${lib.dir}/commons-compress-1.8.1.jar"/>
+            <zap pattern="*.java"/>
+	    </jarjar>
+        <delete file="${dist.dir}/cgsplice"/>
+ 		<concat destfile="${dist.dir}/cgsplice" binary="true">
+ 		     <fileset file="${src.dir}/scripts/stub.sh" />
+ 		     <fileset file="${dist.dir}/cgsplice.jar.tmp" />
+ 		</concat>
+        <delete file="${dist.dir}/cgsplice.jar.tmp"/>
+		<chmod file="${dist.dir}/cgsplice" perm="755"/>
+	</target>
+
+	<!-- See http://stackoverflow.com/questions/2974106/how-to-lookup-the-latest-git-commit-hash-from-an-ant-build-script -->
+	<available file=".git" type="dir" property="git.present"/>
+	<target name="git.revision" description="Store git revision in ${repository.version}" if="git.present">
+	    <exec executable="git" outputproperty="git.revision" failifexecutionfails="false" errorproperty="">
+	        <arg value="describe"/>
+	        <arg value="--tags"/>
+	        <arg value="--always"/>
+	        <arg value="HEAD"/>
+	    </exec>
+	    <condition property="repository.version" value="${git.revision}" else="unknown">
+	        <and>
+	            <isset property="git.revision"/>
+	            <length string="${git.revision}" trim="yes" length="0" when="greater"/>
+	        </and>
+	    </condition>
+	</target>
+
+</project>
+

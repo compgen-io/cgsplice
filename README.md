@@ -1,0 +1,4 @@
+CGSplice
+=========
+
+Splicing related utilities
