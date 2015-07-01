@@ -29,6 +29,8 @@
             includeantruntime="false"
             classpathref="classpath"
             debuglevel="lines,vars,source"
+            target="1.7"
+            source="1.7"
             >
             <compilerclasspath>
                 <fileset file="${blib.dir}/error_prone_ant-2.0.2-SNAPSHOT.jar"/>
@@ -41,7 +43,7 @@
         <copy file="LICENSE" todir="${build.dir}/classes/"/>
         <copy file="INCLUDES" todir="${build.dir}/classes/"/>
         <delete file="${build.dir}/classes/io/compgen/cgsplice/VERSION"/>
- 		<echo file="${build.dir}/classes/io/compgen/cgsplice/VERSION" message="cgsplice-{version}-${repository.version}"/>
+ 		<echo file="${build.dir}/classes/io/compgen/cgsplice/VERSION" message="cgsplice-${version}-${repository.version}"/>
 
 		<mkdir dir="${dist.dir}"/>
 	    <taskdef name="jarjar" classname="com.tonicsystems.jarjar.JarJarTask"

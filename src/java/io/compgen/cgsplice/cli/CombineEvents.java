@@ -23,15 +23,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-@Command(name="find-events", desc="Merges differentially spliced junction counts (junction-diff) into events of related junctions", category="splicing", experimental=true)
-public class FindEvents extends AbstractOutputCommand {
+@Command(name="combine-events", desc="Merges differentially spliced junction counts (splice-diff) into events of related junctions", category="splicing", experimental=true)
+public class CombineEvents extends AbstractOutputCommand {
     public class JunctionEventStats {
-        public final double pvalue;
+        public final double juncFDR;
         public final double pctdiff;
         
-        public JunctionEventStats(double pvalue, double pctdiff) {
+        public JunctionEventStats(double juncFDR, double pctdiff) {
+            this.juncFDR = juncFDR;
             this.pctdiff = pctdiff;
-            this.pvalue = pvalue;
         }
     }
 
@@ -40,7 +40,8 @@ public class FindEvents extends AbstractOutputCommand {
     private String bedFilename = null;
     
     private double pctThreshold = 0.1;
-    private double fdrThreshold = 0.1;
+    private double eventFDRThreshold = 0.1;
+    private double juncFDRThreshold = 0.2;
 
     private Set<String> used = new HashSet<String>();
     
@@ -56,9 +57,14 @@ public class FindEvents extends AbstractOutputCommand {
         this.filename = filename;
     }
 
-    @Option(desc="Minimum FDR cut-off (default: 0.1)", name="fdr", defaultValue="0.1")
-    public void setFDRThreshold(double val) {
-        this.fdrThreshold = val;
+    @Option(desc="Minimum FDR cut-off for whole-event", name="fdr-event", defaultValue="0.1")
+    public void setEventFDRThreshold(double val) {
+        this.eventFDRThreshold = val;
+    }
+
+    @Option(desc="Minimum FDR cut-off for junction", name="fdr-junc", defaultValue="0.2")
+    public void setJunctionFDRThreshold(double val) {
+        this.juncFDRThreshold = val;
     }
 
     @Option(desc="Output failed junctions here (BED)", name="failed")
@@ -71,7 +77,7 @@ public class FindEvents extends AbstractOutputCommand {
         this.bedFilename = filename;
     }
 
-    @Option(desc="Minimum pct-difference (default: 0.1)", name="pct-dff", defaultValue="0.1")
+    @Option(desc="Minimum percent-difference (effect-size)", name="pct-dff", defaultValue="0.1")
     public void setPctDiff(double val) {
         this.pctThreshold = val;
     }
@@ -86,7 +92,7 @@ public class FindEvents extends AbstractOutputCommand {
 //        int siteIdx = -1;
         int pctIdx = -1;
         int fdrIdx = -1;
-        int pvalueIdx = -1;
+//        int pvalueIdx = -1;
         int strandIdx = -1;
         
         Set<JunctionKey> allJunctions = new HashSet<JunctionKey>();
@@ -116,9 +122,9 @@ public class FindEvents extends AbstractOutputCommand {
                         case "pct_diff":
                             pctIdx = i;
                             break;
-                        case "pvalue":
-                            pvalueIdx = i;
-                            break;
+//                        case "pvalue":
+//                            pvalueIdx = i;
+//                            break;
                         case "FDR (B-H)":
                             fdrIdx = i;
                             break;
@@ -132,16 +138,16 @@ public class FindEvents extends AbstractOutputCommand {
 
                     double fdr = Double.parseDouble(cols[fdrIdx]);
                     double pct = Double.parseDouble(cols[pctIdx]);
-                    double pvalue = Double.parseDouble(cols[pvalueIdx]);
+//                    double pvalue = Double.parseDouble(cols[pvalueIdx]);
 
                     JunctionKey junction = new JunctionKey(cols[juncIdx],Strand.parse(cols[strandIdx]));
                     allJunctions.add(junction);
                     
-                    if (fdr > fdrThreshold || Math.abs(pct) < pctThreshold) {
+                    if (fdr > juncFDRThreshold || Math.abs(pct) < pctThreshold) {
                         continue;
                     }
                     
-                    validJunctions.put(junction, new JunctionEventStats(pvalue, pct));
+                    validJunctions.put(junction, new JunctionEventStats(fdr, pct));
                     
                     boolean isDonor = cols[siteTypeIdx].equals("donor");
                     if (isDonor) {
@@ -197,7 +203,8 @@ public class FindEvents extends AbstractOutputCommand {
         writer.write_line("## program: " + NGSUtils.getVersion());
         writer.write_line("## cmd: " + NGSUtils.getArgs());
         writer.write_line("## input: " + filename);
-        writer.write_line("## fdr-threshold: " + fdrThreshold);
+        writer.write_line("## event-fdr-threshold: " + eventFDRThreshold);
+        writer.write_line("## junc-fdr-threshold: " + juncFDRThreshold);
         writer.write_line("## pct-threshold: " + pctThreshold);
         writer.write_line("## total-junctions: "+ allJunctions.size());
         writer.write_line("## passing-junctions: "+ validJunctions.size());
@@ -218,7 +225,7 @@ public class FindEvents extends AbstractOutputCommand {
             boolean retainedIntron = false;
             Strand strand = Strand.NONE;
             
-            List<Double> pvalues = new ArrayList<Double>();
+            List<Double> fdrs = new ArrayList<Double>();
             List<Double> pctdiffs = new ArrayList<Double>();
             for (JunctionKey junc: event) {
                 GenomeSpan region = GenomeSpan.parse(junc.name, true);
@@ -238,11 +245,11 @@ public class FindEvents extends AbstractOutputCommand {
                 
                 JunctionEventStats stats = validJunctions.get(junc);
                 
-                pvalues.add(stats.pvalue);
+                fdrs.add(stats.juncFDR);
                 pctdiffs.add(stats.pctdiff);
                 
-                if (minPvalue == -1 || stats.pvalue < minPvalue) {
-                    minPvalue = stats.pvalue;
+                if (minPvalue == -1 || stats.juncFDR < minPvalue) {
+                    minPvalue = stats.juncFDR;
                 }
                 if (maxPctDiff == -1 || Math.abs(stats.pctdiff) > maxPctDiff) {
                     maxPctDiff = Math.abs(stats.pctdiff);
@@ -255,16 +262,18 @@ public class FindEvents extends AbstractOutputCommand {
                 
             }
 
-            writer.write(StringUtils.join(";", event));
-            writer.write(chrom+":"+start+"-"+end);
-            writer.write(strand.toString());
-            writer.write(event.size());
-            writer.write(minPvalue);
-            writer.write(maxPctDiff);
-            writer.write(retainedIntron ? "Y": "N");
-            writer.write(StringUtils.join(";", pvalues));
-            writer.write(StringUtils.join(";", pctdiffs));
-            writer.eol();
+            if (minPvalue <= eventFDRThreshold) {
+	            writer.write(StringUtils.join(";", event));
+	            writer.write(chrom+":"+start+"-"+end);
+	            writer.write(strand.toString());
+	            writer.write(event.size());
+	            writer.write(minPvalue);
+	            writer.write(maxPctDiff);
+	            writer.write(retainedIntron ? "Y": "N");
+	            writer.write(StringUtils.join(";", fdrs));
+	            writer.write(StringUtils.join(";", pctdiffs));
+	            writer.eol();
+            }
         }
 
         writer.close();

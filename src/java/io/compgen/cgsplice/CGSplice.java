@@ -1,10 +1,11 @@
 package io.compgen.cgsplice;
 
 
+import io.compgen.cgsplice.cli.BamStats;
+import io.compgen.cgsplice.cli.CombineEvents;
 import io.compgen.cgsplice.cli.FastaJunctions;
-import io.compgen.cgsplice.cli.FindEvents;
 import io.compgen.cgsplice.cli.JunctionCount;
-import io.compgen.cgsplice.cli.JunctionDiffCli;
+import io.compgen.cgsplice.cli.SpliceDiff;
 import io.compgen.cmdline.Help;
 import io.compgen.cmdline.License;
 import io.compgen.cmdline.MainBuilder;
@@ -29,16 +30,19 @@ public class CGSplice {
 
 	public static void main(String[] args) throws Exception {
 		CGSplice.args = StringUtils.join(" ", args);
+		
 		new MainBuilder()
 		.setProgName("cgsplice")
 		.setHelpHeader("cgsplice - Computational Genomics Splicing Tools\n---------------------------------------")
 		.setDefaultUsage("Usage: cgsplice cmd [options]")
 		.setHelpFooter("http://compgen.io/cgsplice\n"+getVersion())
+		.setCategoryOrder(new String[] { "splicing", "help"})
 		.addCommand(Help.class)
 		.addCommand(License.class)
         .addCommand(JunctionCount.class)
-        .addCommand(FindEvents.class)
-        .addCommand(JunctionDiffCli.class)
+        .addCommand(CombineEvents.class)
+        .addCommand(SpliceDiff.class)
+        .addCommand(BamStats.class)
         .addCommand(FastaJunctions.class)
 		.findAndRun(args);
 	}

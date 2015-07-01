@@ -19,7 +19,6 @@ public class JunctionDiff {
     
     private int minTotalCount = -1;
     private double maxEditDistance = -1;
-    private Boolean splitReads = null;
     private List<String> sampleNames = new ArrayList<String>();
     private int sampleCount = -1;
     
@@ -28,9 +27,7 @@ public class JunctionDiff {
     private SortedMap<JunctionDonorAcceptor, List<JunctionKey>> acceptors = new TreeMap<JunctionDonorAcceptor, List<JunctionKey>> ();
 
     private PermutedNullDistribution permutedDonorR1 = null;
-    private PermutedNullDistribution permutedDonorR2 = null;
     private PermutedNullDistribution permutedAcceptorR1 = null;
-    private PermutedNullDistribution permutedAcceptorR2 = null;
 
     private int permutedGroupCount = 0;
     
@@ -56,7 +53,6 @@ public class JunctionDiff {
         }
         
         stats.setTotalJunctions(junctions.size());
-        
         
         if (minTotalCount > -1 || maxEditDistance > -1) {
             filterJunctions();
@@ -176,13 +172,11 @@ public class JunctionDiff {
         
         int juncIdx = -1;
         int strandIdx = -1;
-        int readIdx = -1;
         int countIdx = -1;
         int editIdx = -1;
         
         StringLineReader reader = new StringLineReader(filename);
         
-        boolean fileSplitReads = false;
         for (String line: reader) {
             if (line != null && line.charAt(0) != '#') {
                 String[] cols = StringUtils.strip(line).split("\t");
@@ -198,10 +192,6 @@ public class JunctionDiff {
                         case "strand":
                             strandIdx = i;
                             break;
-                        case "readnum":
-                            fileSplitReads = true;
-                            readIdx = i;
-                            break;
                         case "count":
                             countIdx = i;
                             break;
@@ -212,24 +202,11 @@ public class JunctionDiff {
                             break;
                         }
                     }
-                    if (splitReads == null) {
-                        splitReads = fileSplitReads;
-                    } else {
-                        if (splitReads != fileSplitReads) {
-                            throw new JunctionDiffException("You can not compare split-read samples and non-split-read samples!");
-                        }
-                    }
                 } else {
                     // this is a junction line... find the key, if it is new, add a count object, 
                     // and add the counts for this sample.
 
-                    boolean read1 = true;
-                    
-                    if (readIdx > -1) {
-                        read1 = !cols[readIdx].equals("R2"); 
-                    }
-                    
-                    JunctionKey k = new JunctionKey(cols[juncIdx], Strand.parse(cols[strandIdx]), read1);
+                    JunctionKey k = new JunctionKey(cols[juncIdx], Strand.parse(cols[strandIdx]));
 
                     if (!junctions.containsKey(k)) {
                         junctions.put(k, new JunctionCounts(sampleCount));
@@ -244,10 +221,6 @@ public class JunctionDiff {
             }
         }       
         reader.close();
-    }
-
-    public boolean isSplitReads() {
-        return splitReads;
     }
 
     public List<String> getSampleNames() {
@@ -267,13 +240,8 @@ public class JunctionDiff {
         List<Integer[]> permutedGroups = permuteGroups(trueGroups);
         this.permutedGroupCount = permutedGroups.size();
         
-        this.permutedDonorR1 = calcPermutations(permutedGroups, true, true);
-        this.permutedAcceptorR1 = calcPermutations(permutedGroups, true, false);
-
-        if (this.isSplitReads()) {
-            this.permutedDonorR2 = calcPermutations(permutedGroups, false, true);
-            this.permutedAcceptorR2 = calcPermutations(permutedGroups, false, false);
-        }
+        this.permutedDonorR1 = calcPermutations(permutedGroups, true);
+        this.permutedAcceptorR1 = calcPermutations(permutedGroups, false);
 
         List<Integer[]> trueGroupList = new ArrayList<Integer[]>();
         trueGroupList.add(trueGroups);
@@ -289,47 +257,30 @@ public class JunctionDiff {
     }
     
     
-    public double calcPvalue(double testScore, boolean isRead1, boolean isDonor) {
+    public double calcPvalue(double testScore, boolean isDonor) {
         PermutedNullDistribution nullDist;
 
-        if (isRead1) {
-            if (isDonor) {
-                nullDist = permutedDonorR1;
-            } else {
-                nullDist = permutedAcceptorR1;
-            }
+        if (isDonor) {
+            nullDist = permutedDonorR1;
         } else {
-            if (isDonor) {
-                nullDist = permutedDonorR2;
-            } else {
-                nullDist = permutedAcceptorR2;
-            }
+            nullDist = permutedAcceptorR1;
         }
         
         return nullDist.pvalue(testScore);
-//        
-//        testScore = Math.abs(testScore);
-//        
-//        int i;
-//        for (i=0; i<permutedScores.length && testScore <= permutedScores[i]; i++) {}
-//
-//        return (double) (i + 1) / permutedScores.length;
     }
-    private PermutedNullDistribution calcPermutations(List<Integer[]> permutedGroups, boolean isRead1, boolean isDonor) {
+    
+    private PermutedNullDistribution calcPermutations(List<Integer[]> permutedGroups, boolean isDonor) {
         PermutedNullDistribution nullDist = new PermutedNullDistribution();
-        nullDist.setName((isDonor ? "Donor": "Acceptor")+"-"+(isRead1 ? "R1": "R2"));
+        nullDist.setName((isDonor ? "Donor": "Acceptor"));
         
         for (JunctionKey junc: junctions.keySet()) {
             if ((isDonor && junctions.get(junc).isValidDonor()) || (!isDonor && junctions.get(junc).isValidAcceptor())) {
-                if (junc.read1 == isRead1) {
-                    for (Integer[] group: permutedGroups) {
-                        JunctionStats stats = junctions.get(junc).calcStats(group, isDonor);
-                        nullDist.add(stats.tScore);
-                    }
+                for (Integer[] group: permutedGroups) {
+                    JunctionStats stats = junctions.get(junc).calcStats(group, isDonor);
+                    nullDist.add(stats.tScore);
                 }
             }
         }
-
         return nullDist;        
     }
 

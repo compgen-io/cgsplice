@@ -4,9 +4,9 @@ import io.compgen.cgsplice.junction.JunctionCounts;
 import io.compgen.cgsplice.junction.JunctionDiff;
 import io.compgen.cgsplice.junction.JunctionDiffException;
 import io.compgen.cgsplice.junction.JunctionDiffStats;
+import io.compgen.cgsplice.junction.JunctionDiffStats.JunctionDiffSample;
 import io.compgen.cgsplice.junction.JunctionKey;
 import io.compgen.cgsplice.junction.JunctionStats;
-import io.compgen.cgsplice.junction.JunctionDiffStats.JunctionDiffSample;
 import io.compgen.cmdline.annotation.Command;
 import io.compgen.cmdline.annotation.Exec;
 import io.compgen.cmdline.annotation.Option;
@@ -23,25 +23,25 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-@Command(name="junction-diff", desc="Given counts files, find differentially spliced junctions", category="splicing", experimental=true)
-public class JunctionDiffCli extends AbstractOutputCommand {
+@Command(name="splice-diff", desc="Given [junction-count] files, find differentially spliced junctions", category="splicing", experimental=true)
+public class SpliceDiff extends AbstractOutputCommand {
     private List<String> filenames;
     private Integer[] groups;
     
     private double maxEditDistance = -1;
     private int minTotalCount = -1;
     
-    @UnnamedArg(name = "FILEs")
+    @UnnamedArg(name = "count_file1 count_file2...")
     public void setFilename(List<String> filenames) {
         this.filenames = filenames;
     }
 
-    @Option(desc="Require the average edit-distance to be below {value}", name="max-edit-distance", defaultValue="-1")
+    @Option(desc="Require the average edit-distance to be below {val}", name="max-edit-distance")
     public void setMaxEditDistance(double maxEditDistance) {
         this.maxEditDistance = maxEditDistance;
     }
 
-    @Option(desc="Require more than {value} total number of reads crossing a junction", name="min-total-count", defaultValue="-1")
+    @Option(desc="Require more than {value} total number of reads crossing a junction", name="min-total-count")
     public void setMinTotalCount(int minTotalCount) {
         this.minTotalCount = minTotalCount;
     }
@@ -79,35 +79,24 @@ public class JunctionDiffCli extends AbstractOutputCommand {
         
         List<Double> fdrDonorR1 = new ArrayList<Double>();
         List<Double> fdrAcceptorR1 = new ArrayList<Double>();
-        List<Double> fdrDonorR2 = new ArrayList<Double>();
-        List<Double> fdrAcceptorR2 = new ArrayList<Double>();
 
         if (verbose) {
             System.err.println("Calculating FDR...");
         }
+        
         List<Double> pvalueDonorR1 = new ArrayList<Double>();
         List<Double> pvalueAcceptorR1 = new ArrayList<Double>();
-        List<Double> pvalueDonorR2 = new ArrayList<Double>();
-        List<Double> pvalueAcceptorR2 = new ArrayList<Double>();
 
         for (JunctionKey key: juncDiff.getJunctions().keySet()) {
             if (juncDiff.getJunctions().get(key).isValidDonor()) {
                 JunctionStats stats = juncDiff.getJunctions().get(key).calcStats(groups, true);
-                double pvalue = juncDiff.calcPvalue(stats.tScore, key.read1,true);
-                if (!juncDiff.isSplitReads() || key.read1) {
+                double pvalue = juncDiff.calcPvalue(stats.tScore, true);
                     pvalueDonorR1.add(pvalue);
-                } else {
-                    pvalueDonorR2.add(pvalue);
-                }
             }
             if (juncDiff.getJunctions().get(key).isValidAcceptor()) {
                 JunctionStats stats = juncDiff.getJunctions().get(key).calcStats(groups, false);
-                double pvalue = juncDiff.calcPvalue(stats.tScore, key.read1,false);
-                if (!juncDiff.isSplitReads() || key.read1) {
+                double pvalue = juncDiff.calcPvalue(stats.tScore, false);
                     pvalueAcceptorR1.add(pvalue);
-                } else {
-                    pvalueAcceptorR2.add(pvalue);
-                }
             }
         }
             
@@ -129,27 +118,6 @@ public class JunctionDiffCli extends AbstractOutputCommand {
             fdrAcceptorR1.add(fdr[i]);
         }
 
-        if (juncDiff.isSplitReads()) {
-            pvals = new double[pvalueDonorR2.size()];
-            for (int i=0; i<pvals.length; i++) {
-                pvals[i] = pvalueDonorR2.get(i);
-            }
-            fdr = StatUtils.benjaminiHochberg(pvals);
-            for (int i=0; i<fdr.length; i++) {
-                fdrDonorR2.add(fdr[i]);
-            }
-
-            pvals = new double[pvalueAcceptorR2.size()];
-            for (int i=0; i<pvals.length; i++) {
-                pvals[i] = pvalueAcceptorR2.get(i);
-            }
-            fdr = StatUtils.benjaminiHochberg(pvals);
-            for (int i=0; i<fdr.length; i++) {
-                fdrAcceptorR2.add(fdr[i]);
-            }
-        }
-
-        
         Set<String> uniqueJunctions = new HashSet<String>();
         for (JunctionKey key: juncDiff.getJunctions().keySet()) {
             JunctionCounts j = juncDiff.getJunctions().get(key);
@@ -158,7 +126,6 @@ public class JunctionDiffCli extends AbstractOutputCommand {
             }
         }
 
-        
         TabWriter writer = new TabWriter(out);
         writer.write_line("## program: " + NGSUtils.getVersion());
         writer.write_line("## cmd: " + NGSUtils.getArgs());
@@ -173,10 +140,6 @@ public class JunctionDiffCli extends AbstractOutputCommand {
             writer.write_line("## max-edit-distance: " + maxEditDistance);
         }
 
-        if (juncDiff.isSplitReads()) {
-            writer.write_line("## split-reads (summary counts are for R1 and R2)");
-        }
-        
         for (JunctionDiffSample sample: jdStats.getSamples()) {
             writer.write_line("## sample: " + sample.sampleName + ";" + sample.group + ";" + sample.filename);
         }
@@ -190,9 +153,6 @@ public class JunctionDiffCli extends AbstractOutputCommand {
         uniqueJunctions.clear();
 
         writer.write("junction", "strand");
-        if (juncDiff.isSplitReads()) {
-            writer.write("read");
-        }
         writer.write("site_type");
         writer.write("site");
 
@@ -209,16 +169,13 @@ public class JunctionDiffCli extends AbstractOutputCommand {
         }
         
         writer.write("control-pct", "exp-pct", "pct_diff", "tscore");
-        writer.write("pvalue");
+        writer.write("juncFDR");
         writer.write("FDR (B-H)");
         writer.eol();
 
         for (JunctionKey key: juncDiff.getJunctions().keySet()) {
             if (juncDiff.getJunctions().get(key).isValidDonor()) {
                 writer.write(key.name, key.strand.toString());
-                if (juncDiff.isSplitReads()) {
-                    writer.write(key.getReadNum());
-                }
                 writer.write("donor", key.donor.name);
                 for (int i=0; i<filenames.size(); i++) {
                     writer.write(juncDiff.getJunctions().get(key).getCount(i));
@@ -234,21 +191,13 @@ public class JunctionDiffCli extends AbstractOutputCommand {
                 writer.write(stats.expPct);
                 writer.write(stats.pctDiff);
                 writer.write(stats.tScore);
-                writer.write(juncDiff.calcPvalue(stats.tScore, key.read1,true));
-                        
-                if (!juncDiff.isSplitReads() || key.read1) {
-                    writer.write(fdrDonorR1.remove(0));
-                } else {
-                    writer.write(fdrDonorR2.remove(0));
-                }
+                writer.write(juncDiff.calcPvalue(stats.tScore, true));
+                writer.write(fdrDonorR1.remove(0));
                 
                 writer.eol();
             }
             if (juncDiff.getJunctions().get(key).isValidAcceptor()) {
                 writer.write(key.name, key.strand.toString());
-                if (juncDiff.isSplitReads()) {
-                    writer.write(key.getReadNum());
-                }
                 writer.write("acceptor", key.acceptor.name);
                 for (int i=0; i<filenames.size(); i++) {
                     writer.write(juncDiff.getJunctions().get(key).getCount(i));
@@ -264,12 +213,8 @@ public class JunctionDiffCli extends AbstractOutputCommand {
                 writer.write(stats.expPct);
                 writer.write(stats.pctDiff);
                 writer.write(stats.tScore);
-                writer.write(juncDiff.calcPvalue(stats.tScore, key.read1,false));
-                if (!juncDiff.isSplitReads() || key.read1) {
-                    writer.write(fdrAcceptorR1.remove(0));
-                } else {
-                    writer.write(fdrAcceptorR2.remove(0));
-                }
+                writer.write(juncDiff.calcPvalue(stats.tScore, false));
+                writer.write(fdrAcceptorR1.remove(0));
                 
                 writer.eol();
             }
