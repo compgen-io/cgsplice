@@ -78,7 +78,7 @@ public class JunctionCount extends AbstractOutputCommand {
         this.retainedIntrons = val;
     }
 
-    @Option(desc="Reads must overlap the junction by at least {val} bases (default: 10)", name="min-overlap", defaultValue="10")
+    @Option(desc="Reads must overlap the junction by at least {val} bases", name="min-overlap", defaultValue="10")
     public void setMinOverlap(int val) {
         this.minOverlap = val;
     }
@@ -127,7 +127,7 @@ public class JunctionCount extends AbstractOutputCommand {
         }
         writer.eol();
         
-        int readLength = ReadUtils.getReadLength(reader);
+        int readLength = ReadUtils.getSamReadLength(reader);
         if (verbose) {
         	System.err.println("Read length: "+readLength);
         }
